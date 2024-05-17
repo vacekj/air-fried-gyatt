@@ -1,1 +1,1 @@
-# Elux or whatever
+# Bloody Mary 600 Disposable
