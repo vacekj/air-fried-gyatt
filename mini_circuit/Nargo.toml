@@ -1,0 +1,7 @@
+[package]
+name = "mini_circuit"
+type = "bin"
+authors = [""]
+compiler_version = ">=0.29.0"
+
+[dependencies]
