@@ -1,18 +1,10 @@
-
 use p3_air::{Air, AirBuilder, BaseAir};
-
-
-
-
 
 use p3_field::AbstractField;
 use p3_field::{Field, PrimeField64};
 
-use p3_matrix::dense::{RowMajorMatrix};
+use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
-
-
-
 
 use std::borrow::Borrow;
 
@@ -176,7 +168,7 @@ fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
     let two = F::from_canonical_u16(2);
     let three = F::from_canonical_usize(3);
 
-    for (i, row)  in rows.iter_mut().enumerate() {
+    for (i, row) in rows.iter_mut().enumerate() {
         let i_f = F::from_canonical_usize(i);
         row.copy.id_0 = i_f;
         row.copy.id_1 = n_f.mul(two) + i_f;
