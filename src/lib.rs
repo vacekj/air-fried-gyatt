@@ -1,19 +1,19 @@
-use core::num;
+
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
-use p3_challenger::DuplexChallenger;
-use p3_commit::ExtensionMmcs;
-use p3_dft::Radix2DitParallel;
-use p3_field::extension::BinomialExtensionField;
+
+
+
+
+
 use p3_field::AbstractField;
-use p3_field::{Field, PrimeField32, PrimeField64};
-use p3_fri::TwoAdicFriPcs;
-use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
+use p3_field::{Field, PrimeField64};
+
+use p3_matrix::dense::{RowMajorMatrix};
 use p3_matrix::Matrix;
-use p3_merkle_tree::FieldMerkleTreeMmcs;
-use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
-use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use p3_uni_stark::StarkConfig;
+
+
+
+
 use std::borrow::Borrow;
 
 const PLONK_GATE_WIDTH: usize = 15;
@@ -176,16 +176,16 @@ fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
     let two = F::from_canonical_u16(2);
     let three = F::from_canonical_usize(3);
 
-    for i in 0..n {
+    for (i, row)  in rows.iter_mut().enumerate() {
         let i_f = F::from_canonical_usize(i);
-        rows[i].copy.id_0 = i_f;
-        rows[i].copy.id_1 = n_f.mul(two) + i_f;
-        rows[i].copy.id_2 = (n_f.mul(three)) + i_f;
+        row.copy.id_0 = i_f;
+        row.copy.id_1 = n_f.mul(two) + i_f;
+        row.copy.id_2 = (n_f.mul(three)) + i_f;
 
         // Same sigmas for now
-        rows[i].copy.sigma_0 = i_f;
-        rows[i].copy.sigma_1 = n_f.mul(two) + i_f;
-        rows[i].copy.sigma_2 = (n_f.mul(three)) + i_f;
+        row.copy.sigma_0 = i_f;
+        row.copy.sigma_1 = n_f.mul(two) + i_f;
+        row.copy.sigma_2 = (n_f.mul(three)) + i_f;
     }
 
     // Calculate grand product polynomial
@@ -282,7 +282,7 @@ mod test {
         let config = MyConfig::new(pcs);
         let mut challenger = Challenger::new(perm.clone());
 
-        check_constraints(&PlonkAir {}, &trace, &vec![]);
+        check_constraints(&PlonkAir {}, trace, &vec![]);
 
         let proof = prove(
             &config,
