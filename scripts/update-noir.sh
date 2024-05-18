@@ -1,5 +1,5 @@
 #!/bin/bash
 cd mini_circuit
-nargo compile
+nargo compile --expression-width 3
 nargo execute witty.gz
 cd ..

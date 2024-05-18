@@ -1,18 +1,25 @@
+use std::borrow::Borrow;
+use std::fmt;
+use std::fmt::{Display, Formatter};
+use std::ops::{Mul, Neg};
+
+use acir::circuit::Opcode;
+use acir::native_types::WitnessMap;
+use acir::FieldElement;
 use p3_air::{Air, AirBuilder, BaseAir};
-
-use p3_field::AbstractField;
-use p3_field::{Field, PrimeField64};
-
+pub use p3_baby_bear::BabyBear;
+use p3_field::PrimeField64;
+use p3_field::{AbstractField, Field};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 
-use std::borrow::Borrow;
+use crate::circuit_checker::check_constraints;
 
 const PLONK_GATE_WIDTH: usize = 15;
 
 mod circuit_checker;
 
-struct PlonkRow<F> {
+pub struct PlonkRow<F> {
     pub q_l: F,
     pub q_r: F,
     pub q_o: F,
@@ -22,6 +29,49 @@ struct PlonkRow<F> {
     pub b: F,
     pub c: F,
     pub copy: CopyConstraints<F>,
+}
+
+impl<F: Display> Display for PlonkRow<F> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "({} * {}) + ({} * {}) + ({} * {}) + ({} * ({} * {})) + {} = 0",
+            self.q_l,
+            self.a,
+            self.q_r,
+            self.b,
+            self.q_o,
+            self.c,
+            self.q_m,
+            self.a,
+            self.b,
+            self.q_c,
+        )
+    }
+}
+
+impl<F: PrimeField64> PlonkRow<F> {
+    fn set_linear_term(&mut self, x: F, witness: F) {
+        println!(
+            "x: {}, witness: {}",
+            x.as_canonical_u64(),
+            witness.as_canonical_u64()
+        );
+        if self.a == F::zero() {
+            self.a = witness;
+            self.q_l = x;
+        } else if self.b == F::zero() {
+            self.b = witness;
+            self.q_r = x;
+        } else if self.c == F::zero() {
+            self.c = witness;
+            self.q_o = x;
+        } else {
+            unreachable!(
+                "Maximum linear term amount reached. Make sure you are using --expression-width 3"
+            );
+        }
+    }
 }
 
 struct CopyConstraints<F> {
@@ -83,6 +133,82 @@ impl<F> BaseAir<F> for PlonkAir {
 
 struct PlonkAir {}
 
+pub struct PlonkBuilder<F: PrimeField64> {
+    rows: Vec<PlonkRow<F>>,
+}
+
+/// The modulus of the field.
+pub const P: u32 = 15 * (1 << 27) + 1;
+
+/// The modulus of the field as a u64.
+const P_U64: u64 = P as u64;
+
+pub fn ftbb(field: FieldElement) -> BabyBear {
+    return if field.is_negative() {
+        // Negative number
+        println!("Negative number {}", field);
+        BabyBear::from_canonical_u64(P_U64 - field.neg().to_u128() as u64)
+    } else {
+        BabyBear::from_canonical_u64(field.to_u128() as u64)
+    };
+}
+
+impl<F: PrimeField64> PlonkBuilder<F> {
+    fn new() -> PlonkBuilder<F> {
+        PlonkBuilder { rows: vec![] }
+    }
+
+    pub fn from_acir_program(
+        witness_map: &WitnessMap,
+        opcodes: &[Opcode],
+    ) -> PlonkBuilder<BabyBear> {
+        let mut rows: Vec<PlonkRow<BabyBear>> = vec![];
+        for opcode in opcodes {
+            match opcode {
+                Opcode::AssertZero(exp) => {
+                    let mut row: PlonkRow<BabyBear> = PlonkRow::default();
+
+                    // Handle mul part of the gate
+                    if !exp.mul_terms.is_empty() {
+                        let mul_term = &exp.mul_terms[0];
+                        row.q_m = ftbb(mul_term.0);
+
+                        let w_l = &mul_term.1;
+                        row.a = ftbb((*witness_map.get(w_l).unwrap()));
+
+                        let w_r = &mul_term.2;
+                        row.b = ftbb((*witness_map.get(w_r).unwrap()));
+                    }
+
+                    // Handle linear combination part of the gate
+                    for term in &exp.linear_combinations {
+                        row.set_linear_term(ftbb(term.0), ftbb(*witness_map.get(&term.1).unwrap()));
+                    }
+
+                    // Set constant term
+                    row.q_c = ftbb(exp.q_c);
+
+                    rows.push(row);
+                }
+                Opcode::BlackBoxFuncCall(_)
+                | Opcode::Directive(_)
+                | Opcode::MemoryOp { .. }
+                | Opcode::MemoryInit { .. }
+                | Opcode::BrilligCall { .. }
+                | Opcode::Call { .. } => {
+                    println!("Unimplemented opcode")
+                }
+            };
+        }
+
+        PlonkBuilder { rows }
+    }
+
+    pub fn compile(self) -> Vec<PlonkRow<F>> {
+        self.rows
+    }
+}
+
 impl<AB: AirBuilder> Air<AB> for PlonkAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -96,7 +222,7 @@ impl<AB: AirBuilder> Air<AB> for PlonkAir {
                 + (row.q_r * row.b)
                 + (row.q_o * row.c)
                 + (row.q_m * (row.a * row.b))
-                + (row.q_c * row.c),
+                + row.q_c,
         );
 
         build_copy_constraints(builder, row, shift);
@@ -147,6 +273,65 @@ fn generate_mul_gate<F: PrimeField64>(a: F, b: F, c: F) -> PlonkRow<F> {
         q_c: F::zero(),
         copy: CopyConstraints::default(),
     }
+}
+
+pub fn generate_trace_from_plonk_rows<F: PrimeField64>(
+    plonk_rows: &mut Vec<PlonkRow<F>>,
+) -> RowMajorMatrix<F> {
+    let n = plonk_rows.len();
+    let mut trace = RowMajorMatrix::new(vec![F::zero(); n * PLONK_GATE_WIDTH], PLONK_GATE_WIDTH);
+    let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<PlonkRow<F>>() };
+
+    assert!(prefix.is_empty(), "Alignment check! Ethereum aligned??");
+    assert!(suffix.is_empty(), "Alignment check! Ethereum aligned??");
+
+    for i in 0..n - 1 {
+        rows[i] = plonk_rows.remove(0);
+    }
+
+    // Generate sub groups for copy constraints
+    let n_f = F::from_canonical_usize(n);
+    let two = F::from_canonical_u16(2);
+    let three = F::from_canonical_usize(3);
+
+    for (i, row) in rows.iter_mut().enumerate() {
+        let i_f = F::from_canonical_usize(i);
+        row.copy.id_0 = i_f;
+        row.copy.id_1 = n_f.mul(two) + i_f;
+        row.copy.id_2 = (n_f.mul(three)) + i_f;
+
+        // Same sigmas for now
+        row.copy.sigma_0 = i_f;
+        row.copy.sigma_1 = n_f.mul(two) + i_f;
+        row.copy.sigma_2 = (n_f.mul(three)) + i_f;
+    }
+
+    // Calculate grand product polynomial
+    // Probably just resize a vector unsafe?
+    let mut numerator = [F::zero(); 4];
+    let mut denominator = [F::zero(); 4];
+
+    for i in 0..n - 1 {
+        numerator[i] = calculate_numerator(&rows[i]);
+        // TODO: batch inverse
+        denominator[i] = calculate_denominator(&rows[i]);
+    }
+
+    for i in 0..n - 1 {
+        // Calculate running numerator and denominator products
+        numerator[i + 1] *= numerator[i];
+        denominator[i + 1] *= denominator[i];
+    }
+
+    // Calculate grand product accumulator
+    rows[0].copy.acc = F::one();
+    for i in 1..n {
+        rows[i].copy.acc = numerator[i] * denominator[i];
+    }
+
+    check_constraints(&PlonkAir {}, &trace, &vec![]);
+
+    trace
 }
 
 fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
@@ -219,9 +404,8 @@ fn calculate_denominator<F: PrimeField64>(row: &PlonkRow<F>) -> F {
     .inverse()
 }
 
-#[cfg(test)]
-mod test {
-    use crate::{circuit_checker::check_constraints, generate_trace, PlonkAir};
+pub mod test {
+    use acir::native_types::WitnessMap;
     use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
     use p3_challenger::DuplexChallenger;
     use p3_commit::ExtensionMmcs;
@@ -234,6 +418,11 @@ mod test {
     use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
     use p3_uni_stark::{prove, verify, StarkConfig};
     use rand::thread_rng;
+
+    use crate::{
+        circuit_checker::check_constraints, generate_trace, generate_trace_from_plonk_rows,
+        PlonkAir, PlonkBuilder,
+    };
 
     type Val = BabyBear;
     type Perm = Poseidon2<Val, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBabyBear, 16, 7>;
@@ -253,7 +442,7 @@ mod test {
     type Pcs = TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>;
     type MyConfig = StarkConfig<Pcs, Challenge, Challenger>;
 
-    fn prove_and_verify(trace: &DenseMatrix<BabyBear>) {
+    pub fn prove_and_verify(trace: &DenseMatrix<BabyBear>) {
         let perm = Perm::new_from_rng_128(
             Poseidon2ExternalMatrixGeneral,
             DiffusionMatrixBabyBear,
@@ -292,6 +481,17 @@ mod test {
     #[test]
     fn test_simple_add_gates() {
         let trace = generate_trace(4);
+        prove_and_verify(&trace);
+    }
+
+    #[test]
+    fn test_acir() {
+        let opcodes: Vec<Opcode> = vec![];
+        let witness_map = WitnessMap::new();
+        let dc_builder: PlonkBuilder<BabyBear> =
+            PlonkBuilder::<BabyBear>::from_acir_program(&witness_map, &opcodes);
+        let mut rows = dc_builder.compile();
+        let trace = generate_trace_from_plonk_rows(&mut rows);
         prove_and_verify(&trace);
     }
 }
