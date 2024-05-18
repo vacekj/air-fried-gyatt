@@ -146,13 +146,7 @@ pub const P: u32 = 15 * (1 << 27) + 1;
 const P_U64: u64 = P as u64;
 
 pub fn ftbb(field: FieldElement) -> BabyBear {
-    return if field.is_negative() {
-        // Negative number
-        println!("Negative number {}", field);
-        BabyBear::from_canonical_u64(P_U64 - field.neg().to_u128() as u64)
-    } else {
-        BabyBear::from_canonical_u64(field.to_u128() as u64)
-    };
+    BabyBear::from_canonical_u32(field.to_u128() as u32)
 }
 
 impl<F: PrimeField64> PlonkBuilder<F> {
