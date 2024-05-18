@@ -111,8 +111,7 @@ fn build_copy_constraints<AB: AirBuilder>(builder :&mut AB, row: &PlonkRow<AB::V
     let numerator = (row.a + row.copy.id_0 + one.clone()) * (row.b + row.copy.id_1 + one.clone()) * (row.c + row.copy.id_2 + one.clone());
     let denominator = (row.a + row.copy.sigma_0 + one.clone()) * (row.b + row.copy.sigma_1 + one.clone()) * (row.c + row.copy.sigma_2 + one.clone());
 
-    let first = builder.is_first_row();
-    builder.when_transition().assert_zero(((row.copy.acc + first) * numerator) - (shift.copy.acc * denominator));
+    builder.assert_zero((row.copy.acc * numerator) - (shift.copy.acc * denominator));
 }
 
 
@@ -199,7 +198,7 @@ fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
     }
 
     // Calculate grand product accumulator
-    rows[0].copy.acc = F::zero();
+    rows[0].copy.acc = F::one();
     for i in 1..n {
         rows[i].copy.acc = numerator[i] * denominator[i];
     }
