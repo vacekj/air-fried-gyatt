@@ -470,6 +470,7 @@ dependencies = [
 name = "circuit-checker"
 version = "0.1.0"
 dependencies = [
+ "acir",
  "p3-air",
  "p3-baby-bear",
  "p3-blake3",
@@ -2226,6 +2227,7 @@ name = "smoke-stack"
 version = "0.1.0"
 dependencies = [
  "acir",
+ "circuit-checker",
  "clap",
  "nargo",
  "serde_json",
