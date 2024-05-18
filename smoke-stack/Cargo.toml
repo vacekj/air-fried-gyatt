@@ -7,12 +7,6 @@ edition = "2021"
 clap = { version = "4.5.4", features = ["derive"] }
 serde_json = "1.0.117"
 circuit-checker = { path = "../circuit-checker" }
+acir.workspace = true
+nargo.workspace = true
 
-[dependencies.acir]
-git = "https://github.com/philogy/noir-snapshot"
-features = ["baby_bear"]
-rev = "6827c34"
-
-[dependencies.nargo]
-git = "https://github.com/philogy/noir-snapshot"
-rev = "6827c34"

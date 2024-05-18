@@ -32,7 +32,5 @@ rand = "0.8.5"
 serde = "1.0.202"
 serde_json = "1.0.117"
 serde_bytes = "0.11.14"
+acir.workspace = true
 
-[dependencies.acir]
-git = "https://github.com/philogy/noir-snapshot"
-rev = "8796a77"

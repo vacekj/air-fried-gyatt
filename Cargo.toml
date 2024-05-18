@@ -8,3 +8,12 @@ members = [
     "smoke-stack"
 ]
 debug-assertions = true
+
+[workspace.dependencies.acir]
+git = "https://github.com/philogy/noir-snapshot"
+features = ["baby_bear"]
+rev = "6827c34"
+
+[workspace.dependencies.nargo]
+git = "https://github.com/philogy/noir-snapshot"
+rev = "6827c34"
