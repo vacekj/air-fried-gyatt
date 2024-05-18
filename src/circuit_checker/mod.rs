@@ -1,6 +1,10 @@
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues};
 use p3_field::Field;
-use p3_matrix::{dense::{RowMajorMatrix, RowMajorMatrixView}, stack::VerticalPair, Matrix};
+use p3_matrix::{
+    dense::{RowMajorMatrix, RowMajorMatrixView},
+    stack::VerticalPair,
+    Matrix,
+};
 
 pub fn check_constraints<F, A>(air: &A, main: &RowMajorMatrix<F>, public_values: &Vec<F>)
 where

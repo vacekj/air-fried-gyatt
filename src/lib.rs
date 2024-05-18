@@ -1,19 +1,19 @@
+use core::num;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
-use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_field::extension::BinomialExtensionField;
-use p3_fri::TwoAdicFriPcs;
 use p3_field::AbstractField;
+use p3_field::{Field, PrimeField32, PrimeField64};
+use p3_fri::TwoAdicFriPcs;
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_matrix::Matrix;
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
-use core::num;
 use std::borrow::Borrow;
 
 const PLONK_GATE_WIDTH: usize = 15;
@@ -29,7 +29,7 @@ struct PlonkRow<F> {
     pub a: F,
     pub b: F,
     pub c: F,
-    pub copy: CopyConstraints<F>
+    pub copy: CopyConstraints<F>,
 }
 
 struct CopyConstraints<F> {
@@ -39,7 +39,7 @@ struct CopyConstraints<F> {
     pub sigma_0: F,
     pub sigma_1: F,
     pub sigma_2: F,
-    pub acc: F
+    pub acc: F,
 }
 
 impl<F> Borrow<PlonkRow<F>> for [F] {
@@ -59,14 +59,13 @@ impl<F: PrimeField64> Default for CopyConstraints<F> {
             id_0: F::zero(),
             id_1: F::zero(),
             id_2: F::zero(),
-             sigma_0: F::zero(),
-             sigma_1: F::zero(),
-             sigma_2: F::zero(),
-             acc: F::zero()
+            sigma_0: F::zero(),
+            sigma_1: F::zero(),
+            sigma_2: F::zero(),
+            acc: F::zero(),
         }
     }
 }
-
 
 impl<F: PrimeField64> Default for PlonkRow<F> {
     fn default() -> Self {
@@ -79,7 +78,7 @@ impl<F: PrimeField64> Default for PlonkRow<F> {
             a: F::zero(),
             b: F::zero(),
             c: F::zero(),
-            copy: CopyConstraints::default()
+            copy: CopyConstraints::default(),
         }
     }
 }
@@ -100,22 +99,34 @@ impl<AB: AirBuilder> Air<AB> for PlonkAir {
         let shift: &PlonkRow<AB::Var> = (*shift).borrow();
         let mut when_transition = builder.when_transition();
 
-        when_transition.assert_zero((row.q_l * row.a) + (row.q_r * row.b)
-            + (row.q_o * row.c) + (row.q_m * (row.a * row.b)) + (row.q_c * row.c));
+        when_transition.assert_zero(
+            (row.q_l * row.a)
+                + (row.q_r * row.b)
+                + (row.q_o * row.c)
+                + (row.q_m * (row.a * row.b))
+                + (row.q_c * row.c),
+        );
 
         build_copy_constraints(builder, row, shift);
     }
 }
 
-fn build_copy_constraints<AB: AirBuilder>(builder :&mut AB, row: &PlonkRow<AB::Var>, shift: &PlonkRow<AB::Var>) {
+fn build_copy_constraints<AB: AirBuilder>(
+    builder: &mut AB,
+    row: &PlonkRow<AB::Var>,
+    shift: &PlonkRow<AB::Var>,
+) {
     // TOOD: require randomness
     let one = AB::Expr::one();
-    let numerator = (row.a + row.copy.id_0 + one.clone()) * (row.b + row.copy.id_1 + one.clone()) * (row.c + row.copy.id_2 + one.clone());
-    let denominator = (row.a + row.copy.sigma_0 + one.clone()) * (row.b + row.copy.sigma_1 + one.clone()) * (row.c + row.copy.sigma_2 + one.clone());
+    let numerator = (row.a + row.copy.id_0 + one.clone())
+        * (row.b + row.copy.id_1 + one.clone())
+        * (row.c + row.copy.id_2 + one.clone());
+    let denominator = (row.a + row.copy.sigma_0 + one.clone())
+        * (row.b + row.copy.sigma_1 + one.clone())
+        * (row.c + row.copy.sigma_2 + one.clone());
 
     builder.assert_zero((row.copy.acc * numerator) - (shift.copy.acc * denominator));
 }
-
 
 // We write in empty copy constraints, as we will fill them in later
 fn generate_add_gate<F: PrimeField64>(a: F, b: F, c: F) -> PlonkRow<F> {
@@ -128,7 +139,7 @@ fn generate_add_gate<F: PrimeField64>(a: F, b: F, c: F) -> PlonkRow<F> {
         q_o: F::neg_one(),
         q_m: F::zero(),
         q_c: F::zero(),
-        copy: CopyConstraints::default() 
+        copy: CopyConstraints::default(),
     }
 }
 
@@ -142,15 +153,13 @@ fn generate_mul_gate<F: PrimeField64>(a: F, b: F, c: F) -> PlonkRow<F> {
         q_o: F::neg_one(),
         q_m: F::one(),
         q_c: F::zero(),
-        copy: CopyConstraints::default()
+        copy: CopyConstraints::default(),
     }
 }
 
 fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
     let mut trace = RowMajorMatrix::new(vec![F::zero(); n * PLONK_GATE_WIDTH], PLONK_GATE_WIDTH);
-    let (prefix, rows, suffix) = unsafe {
-        trace.values.align_to_mut::<PlonkRow<F>>()
-    };
+    let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<PlonkRow<F>>() };
 
     assert!(prefix.is_empty(), "Alignment check! Ethereum aligned??");
     assert!(suffix.is_empty(), "Alignment check! Ethereum aligned??");
@@ -167,9 +176,7 @@ fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
     let two = F::from_canonical_u16(2);
     let three = F::from_canonical_usize(3);
 
-
     for i in 0..n {
-
         let i_f = F::from_canonical_usize(i);
         rows[i].copy.id_0 = i_f;
         rows[i].copy.id_1 = n_f.mul(two) + i_f;
@@ -180,23 +187,22 @@ fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
         rows[i].copy.sigma_1 = n_f.mul(two) + i_f;
         rows[i].copy.sigma_2 = (n_f.mul(three)) + i_f;
     }
-    
 
     // Calculate grand product polynomial
     // Probably just resize a vector unsafe?
     let mut numerator = [F::zero(); 4];
     let mut denominator = [F::zero(); 4];
-    
+
     for i in 0..n {
-        numerator[i] = calculate_numerator(&rows[i]); 
+        numerator[i] = calculate_numerator(&rows[i]);
         // TODO: batch inverse
         denominator[i] = calculate_denominator(&rows[i]);
     }
-    
-    for i in 0..n-1 {
+
+    for i in 0..n - 1 {
         // Calculate running numerator and denominator products
-        numerator[i+1] *= numerator[i]; 
-        denominator[i+1] *= denominator[i]; 
+        numerator[i + 1] *= numerator[i];
+        denominator[i + 1] *= denominator[i];
     }
 
     // Calculate grand product accumulator
@@ -209,16 +215,21 @@ fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
 }
 
 fn calculate_numerator<F: PrimeField64>(row: &PlonkRow<F>) -> F {
-    (row.a + row.copy.id_0 + F::one()) * (row.b + row.copy.id_1 + F::one()) * (row.c + row.copy.id_2 + F::one())
+    (row.a + row.copy.id_0 + F::one())
+        * (row.b + row.copy.id_1 + F::one())
+        * (row.c + row.copy.id_2 + F::one())
 }
 
 fn calculate_denominator<F: PrimeField64>(row: &PlonkRow<F>) -> F {
-    ((row.a + row.copy.sigma_0 + F::one()) * (row.b + row.copy.sigma_1 + F::one()) * (row.c + row.copy.sigma_2 + F::one())).inverse()
+    ((row.a + row.copy.sigma_0 + F::one())
+        * (row.b + row.copy.sigma_1 + F::one())
+        * (row.c + row.copy.sigma_2 + F::one()))
+    .inverse()
 }
-
 
 #[cfg(test)]
 mod test {
+    use crate::{circuit_checker::check_constraints, generate_trace, PlonkAir};
     use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
     use p3_challenger::DuplexChallenger;
     use p3_commit::ExtensionMmcs;
@@ -229,16 +240,20 @@ mod test {
     use p3_merkle_tree::FieldMerkleTreeMmcs;
     use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
     use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-    use p3_uni_stark::{ prove, verify, StarkConfig};
+    use p3_uni_stark::{prove, verify, StarkConfig};
     use rand::thread_rng;
-    use crate::{circuit_checker::check_constraints, generate_trace, PlonkAir};
 
     type Val = BabyBear;
     type Perm = Poseidon2<Val, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBabyBear, 16, 7>;
     type MyHash = PaddingFreeSponge<Perm, 16, 8, 8>;
     type MyCompress = TruncatedPermutation<Perm, 2, 8, 16>;
-    type ValMmcs =
-    FieldMerkleTreeMmcs<<Val as Field>::Packing, <Val as Field>::Packing, MyHash, MyCompress, 8>;
+    type ValMmcs = FieldMerkleTreeMmcs<
+        <Val as Field>::Packing,
+        <Val as Field>::Packing,
+        MyHash,
+        MyCompress,
+        8,
+    >;
     type Challenge = BinomialExtensionField<Val, 4>;
     type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
     type Challenger = DuplexChallenger<Val, Perm, 16, 8>;
@@ -267,13 +282,19 @@ mod test {
         let config = MyConfig::new(pcs);
         let mut challenger = Challenger::new(perm.clone());
 
-        check_constraints(&PlonkAir{}, &trace, &vec![]);
+        check_constraints(&PlonkAir {}, &trace, &vec![]);
 
-        let proof = prove(&config, &PlonkAir {}, &mut challenger, trace.clone(), &vec![]);
+        let proof = prove(
+            &config,
+            &PlonkAir {},
+            &mut challenger,
+            trace.clone(),
+            &vec![],
+        );
 
         let mut challenger = Challenger::new(perm);
-        verify(&config, &PlonkAir {}, &mut challenger, &proof, &vec![]).expect("verification failed");
-
+        verify(&config, &PlonkAir {}, &mut challenger, &proof, &vec![])
+            .expect("verification failed");
     }
 
     #[test]
