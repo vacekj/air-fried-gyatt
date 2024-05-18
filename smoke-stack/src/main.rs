@@ -33,7 +33,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let func = &program.bytecode.functions[0];
 
     dbg!(witnesses);
-
     let opcodes = &func.opcodes;
     for op in opcodes.clone() {
         match op {
@@ -53,6 +52,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trace = generate_trace_from_plonk_rows(&mut gates);
 
     prove_and_verify(&trace);
-
+    println!("BRO WE VERIFIED");
     Ok(())
 }

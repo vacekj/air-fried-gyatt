@@ -19,6 +19,7 @@ const PLONK_GATE_WIDTH: usize = 15;
 
 mod circuit_checker;
 
+#[derive(Clone)]
 pub struct PlonkRow<F> {
     pub q_l: F,
     pub q_r: F,
@@ -74,6 +75,7 @@ impl<F: PrimeField64> PlonkRow<F> {
     }
 }
 
+#[derive(Clone)]
 struct CopyConstraints<F> {
     pub id_0: F,
     pub id_1: F,
@@ -278,15 +280,20 @@ fn generate_mul_gate<F: PrimeField64>(a: F, b: F, c: F) -> PlonkRow<F> {
 pub fn generate_trace_from_plonk_rows<F: PrimeField64>(
     plonk_rows: &mut Vec<PlonkRow<F>>,
 ) -> RowMajorMatrix<F> {
-    let n = plonk_rows.len();
+    // NB: N needs to be a power of two
+    let mut n = plonk_rows.len().next_power_of_two();
+    if n == 1 {
+        n = 2;
+    }
     let mut trace = RowMajorMatrix::new(vec![F::zero(); n * PLONK_GATE_WIDTH], PLONK_GATE_WIDTH);
     let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<PlonkRow<F>>() };
 
     assert!(prefix.is_empty(), "Alignment check! Ethereum aligned??");
     assert!(suffix.is_empty(), "Alignment check! Ethereum aligned??");
 
-    for i in 0..n - 1 {
-        rows[i] = plonk_rows.remove(0);
+    /* Insert the rows */
+    for i in 0..plonk_rows.len() {
+        rows[i] = plonk_rows[i].clone();
     }
 
     // Generate sub groups for copy constraints
@@ -308,10 +315,14 @@ pub fn generate_trace_from_plonk_rows<F: PrimeField64>(
 
     // Calculate grand product polynomial
     // Probably just resize a vector unsafe?
-    let mut numerator = [F::zero(); 4];
-    let mut denominator = [F::zero(); 4];
+    let mut numerator = Vec::with_capacity(n);
+    numerator.fill(F::zero());
+    unsafe { numerator.set_len(n) }
+    let mut denominator = Vec::with_capacity(n);
+    denominator.fill(F::zero());
+    unsafe { denominator.set_len(n) }
 
-    for i in 0..n - 1 {
+    for i in 0..n {
         numerator[i] = calculate_numerator(&rows[i]);
         // TODO: batch inverse
         denominator[i] = calculate_denominator(&rows[i]);
@@ -319,8 +330,11 @@ pub fn generate_trace_from_plonk_rows<F: PrimeField64>(
 
     for i in 0..n - 1 {
         // Calculate running numerator and denominator products
-        numerator[i + 1] *= numerator[i];
-        denominator[i + 1] *= denominator[i];
+        let num = numerator[i];
+        numerator[i + 1] *= num;
+
+        let den = denominator[i];
+        denominator[i + 1] *= den;
     }
 
     // Calculate grand product accumulator
@@ -334,7 +348,7 @@ pub fn generate_trace_from_plonk_rows<F: PrimeField64>(
     trace
 }
 
-fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
+pub fn generate_trace<F: PrimeField64>(n: usize) -> RowMajorMatrix<F> {
     let mut trace = RowMajorMatrix::new(vec![F::zero(); n * PLONK_GATE_WIDTH], PLONK_GATE_WIDTH);
     let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<PlonkRow<F>>() };
 
@@ -405,6 +419,7 @@ fn calculate_denominator<F: PrimeField64>(row: &PlonkRow<F>) -> F {
 }
 
 pub mod test {
+    use acir::circuit::Opcode;
     use acir::native_types::WitnessMap;
     use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
     use p3_challenger::DuplexChallenger;
