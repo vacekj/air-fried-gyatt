@@ -1,5 +1,7 @@
 fn main(x: Field, y: pub Field) {
     assert(x * 4 == y * 3);
+    assert(x != y);
+
     ligma(x, y);
 }
 
