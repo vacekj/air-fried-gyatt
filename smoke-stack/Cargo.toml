@@ -11,8 +11,8 @@ circuit-checker = { path = "../circuit-checker" }
 [dependencies.acir]
 git = "https://github.com/philogy/noir-snapshot"
 features = ["baby_bear"]
-rev = "35cf340"
+rev = "6827c34"
 
 [dependencies.nargo]
 git = "https://github.com/philogy/noir-snapshot"
-rev = "35cf340"
+rev = "6827c34"
