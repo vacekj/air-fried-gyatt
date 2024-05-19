@@ -1,17 +1,39 @@
 use std::borrow::Borrow;
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::ops::{Mul, Neg};
 
 use acir::circuit::Opcode;
 use acir::native_types::WitnessMap;
 use acir::FieldElement;
 use p3_air::{Air, AirBuilder, BaseAir};
 pub use p3_baby_bear::BabyBear;
-use p3_field::PrimeField64;
-use p3_field::{AbstractField, Field};
+use p3_baby_bear::DiffusionMatrixBabyBear;
+use p3_challenger::DuplexChallenger;
+use p3_commit::ExtensionMmcs;
+use p3_dft::Radix2DitParallel;
+use p3_field::{extension::BinomialExtensionField, AbstractField, Field, PrimeField64};
+use p3_fri::{FriConfig, TwoAdicFriPcs};
+use p3_matrix::dense::DenseMatrix;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
+use p3_merkle_tree::FieldMerkleTreeMmcs;
+use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
+use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
+use p3_uni_stark::{prove, verify, StarkConfig};
+use rand::thread_rng;
+
+type Val = BabyBear;
+type Perm = Poseidon2<Val, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBabyBear, 16, 7>;
+type MyHash = PaddingFreeSponge<Perm, 16, 8, 8>;
+type MyCompress = TruncatedPermutation<Perm, 2, 8, 16>;
+type ValMmcs =
+    FieldMerkleTreeMmcs<<Val as Field>::Packing, <Val as Field>::Packing, MyHash, MyCompress, 8>;
+type Challenge = BinomialExtensionField<Val, 4>;
+type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
+type Challenger = DuplexChallenger<Val, Perm, 16, 8>;
+type Dft = Radix2DitParallel;
+type Pcs = TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>;
+type MyConfig = StarkConfig<Pcs, Challenge, Challenger>;
 
 use crate::circuit_checker::check_constraints;
 
@@ -36,16 +58,16 @@ impl<F: Display> Display for PlonkRow<F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "({} * {}) + ({} * {}) + ({} * {}) + ({} * ({} * {})) + {} = 0",
+            "{} * ({} * {}) + {} * {} + {} * {} + {} * {} + {} = 0",
+            self.q_m,
+            self.a,
+            self.b,
             self.q_l,
             self.a,
             self.q_r,
             self.b,
             self.q_o,
             self.c,
-            self.q_m,
-            self.a,
-            self.b,
             self.q_c,
         )
     }
@@ -128,7 +150,7 @@ impl<F> BaseAir<F> for PlonkAir {
     }
 }
 
-struct PlonkAir {}
+struct PlonkAir;
 
 pub struct PlonkBuilder<F: PrimeField64> {
     rows: Vec<PlonkRow<F>>,
@@ -165,10 +187,10 @@ impl<F: PrimeField64> PlonkBuilder<F> {
                         row.q_m = ftbb(mul_term.0);
 
                         let w_l = &mul_term.1;
-                        row.a = ftbb((*witness_map.get(w_l).unwrap()));
+                        row.a = ftbb(*witness_map.get(w_l).unwrap());
 
                         let w_r = &mul_term.2;
-                        row.b = ftbb((*witness_map.get(w_r).unwrap()));
+                        row.b = ftbb(*witness_map.get(w_r).unwrap());
                     }
 
                     // Handle linear combination part of the gate
@@ -181,13 +203,18 @@ impl<F: PrimeField64> PlonkBuilder<F> {
 
                     rows.push(row);
                 }
-                Opcode::BlackBoxFuncCall(_)
+
+                Opcode::BrilligCall { .. } => {
+                    println!(
+                        "Ignored brillig (unconstrained) call in opcode interpreter (TODO: Remove)"
+                    );
+                }
+                op @ (Opcode::BlackBoxFuncCall(_)
                 | Opcode::Directive(_)
                 | Opcode::MemoryOp { .. }
                 | Opcode::MemoryInit { .. }
-                | Opcode::BrilligCall { .. }
-                | Opcode::Call { .. } => {
-                    println!("Unimplemented opcode")
+                | Opcode::Call { .. }) => {
+                    panic!("Unhandled op {:?}", op);
                 }
             };
         }
@@ -332,7 +359,7 @@ pub fn generate_trace_from_plonk_rows<F: PrimeField64>(
         rows[i].copy.acc = numerator[i] * denominator[i];
     }
 
-    check_constraints(&PlonkAir {}, &trace, &vec![]);
+    check_constraints(&PlonkAir, &trace, &vec![]);
 
     trace
 }
@@ -407,80 +434,47 @@ fn calculate_denominator<F: PrimeField64>(row: &PlonkRow<F>) -> F {
     .inverse()
 }
 
-pub mod test {
+pub fn prove_and_verify(trace: &DenseMatrix<BabyBear>) {
+    let perm = Perm::new_from_rng_128(
+        Poseidon2ExternalMatrixGeneral,
+        DiffusionMatrixBabyBear,
+        &mut thread_rng(),
+    );
+    let hash = MyHash::new(perm.clone());
+    let compress = MyCompress::new(perm.clone());
+    let val_mmcs = ValMmcs::new(hash, compress);
+    let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
+    let dft = Dft {};
+    let fri_config = FriConfig {
+        log_blowup: 2,
+        num_queries: 28,
+        proof_of_work_bits: 8,
+        mmcs: challenge_mmcs,
+    };
+    let pcs = Pcs::new(dft, val_mmcs, fri_config);
+    let config = MyConfig::new(pcs);
+    let mut challenger = Challenger::new(perm.clone());
+
+    check_constraints(&PlonkAir {}, trace, &vec![]);
+
+    let proof = prove(
+        &config,
+        &PlonkAir {},
+        &mut challenger,
+        trace.clone(),
+        &vec![],
+    );
+
+    let mut challenger = Challenger::new(perm);
+    verify(&config, &PlonkAir, &mut challenger, &proof, &vec![]).expect("verification failed");
+}
+
+#[cfg(test)]
+mod test {
+    use super::{generate_trace, generate_trace_from_plonk_rows, prove_and_verify, PlonkBuilder};
     use acir::circuit::Opcode;
     use acir::native_types::WitnessMap;
-    use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
-    use p3_challenger::DuplexChallenger;
-    use p3_commit::ExtensionMmcs;
-    use p3_dft::Radix2DitParallel;
-    use p3_field::{extension::BinomialExtensionField, Field};
-    use p3_fri::{FriConfig, TwoAdicFriPcs};
-    use p3_matrix::dense::DenseMatrix;
-    use p3_merkle_tree::FieldMerkleTreeMmcs;
-    use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
-    use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-    use p3_uni_stark::{prove, verify, StarkConfig};
-    use rand::thread_rng;
-
-    use crate::{
-        circuit_checker::check_constraints, generate_trace, generate_trace_from_plonk_rows,
-        PlonkAir, PlonkBuilder,
-    };
-
-    type Val = BabyBear;
-    type Perm = Poseidon2<Val, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBabyBear, 16, 7>;
-    type MyHash = PaddingFreeSponge<Perm, 16, 8, 8>;
-    type MyCompress = TruncatedPermutation<Perm, 2, 8, 16>;
-    type ValMmcs = FieldMerkleTreeMmcs<
-        <Val as Field>::Packing,
-        <Val as Field>::Packing,
-        MyHash,
-        MyCompress,
-        8,
-    >;
-    type Challenge = BinomialExtensionField<Val, 4>;
-    type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
-    type Challenger = DuplexChallenger<Val, Perm, 16, 8>;
-    type Dft = Radix2DitParallel;
-    type Pcs = TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>;
-    type MyConfig = StarkConfig<Pcs, Challenge, Challenger>;
-
-    pub fn prove_and_verify(trace: &DenseMatrix<BabyBear>) {
-        let perm = Perm::new_from_rng_128(
-            Poseidon2ExternalMatrixGeneral,
-            DiffusionMatrixBabyBear,
-            &mut thread_rng(),
-        );
-        let hash = MyHash::new(perm.clone());
-        let compress = MyCompress::new(perm.clone());
-        let val_mmcs = ValMmcs::new(hash, compress);
-        let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
-        let dft = Dft {};
-        let fri_config = FriConfig {
-            log_blowup: 2,
-            num_queries: 28,
-            proof_of_work_bits: 8,
-            mmcs: challenge_mmcs,
-        };
-        let pcs = Pcs::new(dft, val_mmcs, fri_config);
-        let config = MyConfig::new(pcs);
-        let mut challenger = Challenger::new(perm.clone());
-
-        check_constraints(&PlonkAir {}, trace, &vec![]);
-
-        let proof = prove(
-            &config,
-            &PlonkAir {},
-            &mut challenger,
-            trace.clone(),
-            &vec![],
-        );
-
-        let mut challenger = Challenger::new(perm);
-        verify(&config, &PlonkAir {}, &mut challenger, &proof, &vec![])
-            .expect("verification failed");
-    }
+    use p3_baby_bear::BabyBear;
 
     #[test]
     fn test_simple_add_gates() {

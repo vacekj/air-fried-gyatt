@@ -935,6 +935,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gyatt-fryer-cli"
+version = "0.1.0"
+dependencies = [
+ "acir",
+ "circuit-checker",
+ "clap",
+ "nargo",
+ "serde_json",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2221,17 +2232,6 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
-
-[[package]]
-name = "smoke-stack"
-version = "0.1.0"
-dependencies = [
- "acir",
- "circuit-checker",
- "clap",
- "nargo",
- "serde_json",
-]
 
 [[package]]
 name = "smol_str"
