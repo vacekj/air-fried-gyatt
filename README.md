@@ -8,4 +8,4 @@
 4. Compile & generate witnesses for your circuit using `nargo` (cd into `mini_circuit` for our example, CD back out after)
     1. `nargo compile --expression-width 3`
     2. `nargo execute witness.gz`
-5. Run backend with `cargo run --bin gyatt-fryer-cli -- mini_circuit/target/wittness.gz mini_circuit/target/mini_circuit.json`
+5. Run backend with `cargo run --bin gyatt-fryer-cli -- mini_circuit/target/witness.gz mini_circuit/target/mini_circuit.json`
