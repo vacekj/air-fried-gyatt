@@ -53,11 +53,6 @@ impl<F: Display> Display for PlonkRow<F> {
 
 impl<F: PrimeField64> PlonkRow<F> {
     fn set_linear_term(&mut self, x: F, witness: F) {
-        println!(
-            "x: {}, witness: {}",
-            x.as_canonical_u64(),
-            witness.as_canonical_u64()
-        );
         if self.a == F::zero() {
             self.a = witness;
             self.q_l = x;

@@ -9,7 +9,7 @@ use serde_json;
 use std::fs;
 
 #[derive(Parser, Debug)]
-#[clap(about = "Vape Disposal 6000 Noir Backend")]
+#[clap(about = "Air Fried Booty Noir Backend")]
 struct Args {
     #[clap(index = 1)]
     circuit_path: String,
@@ -31,17 +31,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let program: ProgramArtifact = serde_json::from_str(contents.as_str())?;
 
     let func = &program.bytecode.functions[0];
-
     dbg!(witnesses);
     let opcodes = &func.opcodes;
-    for op in opcodes.clone() {
-        match op {
-            Opcode::AssertZero(exp) => {
-                dbg!(exp);
-            }
-            _ => {}
-        }
-    }
+    dbg!(opcodes);
+    // for op in opcodes.clone() {
+    //     match op {
+    //         Opcode::AssertZero(exp) => {
+    //             dbg!(exp);
+    //         }
+    //         _ => {}
+    //     }
+    // }
 
     let builder = PlonkBuilder::<BabyBear>::from_acir_program(witnesses, opcodes);
     let mut gates = builder.compile();
