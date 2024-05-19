@@ -43,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let builder = PlonkBuilder::<BabyBear>::from_acir_program(witnesses, opcodes);
     let mut gates = builder.compile();
+    println!("q_m * (a * b) + q_l * a + q_r * b + q_o * c + q_c = 0");
     for gate in &gates {
         println!("{}", gate);
     }

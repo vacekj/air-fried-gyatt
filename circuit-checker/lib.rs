@@ -58,16 +58,16 @@ impl<F: Display> Display for PlonkRow<F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "({} * {}) + ({} * {}) + ({} * {}) + ({} * ({} * {})) + {} = 0",
+            "{} * ({} * {}) + {} * {} + {} * {} + {} * {} + {} = 0",
+            self.q_m,
+            self.a,
+            self.b,
             self.q_l,
             self.a,
             self.q_r,
             self.b,
             self.q_o,
             self.c,
-            self.q_m,
-            self.a,
-            self.b,
             self.q_c,
         )
     }
@@ -234,6 +234,7 @@ impl<F: PrimeField64> PlonkBuilder<F> {
 
 impl<AB: AirBuilder> Air<AB> for PlonkAir {
     fn eval(&self, builder: &mut AB) {
+        println!("eval");
         let main = builder.main();
         let (row, shift) = (main.row_slice(0), main.row_slice(1));
         let row: &PlonkRow<AB::Var> = (*row).borrow();
