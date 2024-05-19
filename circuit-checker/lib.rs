@@ -156,20 +156,11 @@ pub struct PlonkBuilder<F: PrimeField64> {
     rows: Vec<PlonkRow<F>>,
 }
 
-/// The modulus of the field.
-pub const P: u32 = 15 * (1 << 27) + 1;
-
-/// The modulus of the field as a u64.
-const P_U64: u64 = P as u64;
-
 pub fn ftbb(field: FieldElement) -> BabyBear {
     BabyBear::from_canonical_u32(field.to_u128() as u32)
 }
 
 impl<F: PrimeField64> PlonkBuilder<F> {
-    fn new() -> PlonkBuilder<F> {
-        PlonkBuilder { rows: vec![] }
-    }
 
     pub fn from_acir_program(
         witness_map: &WitnessMap,
