@@ -1,5 +1,5 @@
 [package]
-name = "smoke-stack"
+name = "gyatt-fryer-cli"
 version = "0.1.0"
 edition = "2021"
 
