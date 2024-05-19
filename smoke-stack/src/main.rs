@@ -1,8 +1,6 @@
-use acir::circuit::ExpressionOrMemory::Expression;
 use acir::circuit::Opcode;
 use acir::native_types::WitnessStack;
-use circuit_checker::test::prove_and_verify;
-use circuit_checker::{generate_trace_from_plonk_rows, BabyBear, PlonkBuilder};
+use circuit_checker::{generate_trace_from_plonk_rows, prove_and_verify, BabyBear, PlonkBuilder};
 use clap::Parser;
 use nargo::artifacts::program::ProgramArtifact;
 use serde_json;
